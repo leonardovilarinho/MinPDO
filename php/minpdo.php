@@ -1,5 +1,7 @@
 <?php
 
+class MinPDOException extends ErrorException {}
+
 class MinPDO {
 
     public static $sgbd = "mysql";
@@ -15,8 +17,7 @@ class MinPDO {
             $conn->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
             return $conn;
         } catch (PDOException $ex) {
-            echo "<br><b>Error:</b> " . $ex->getMessage();
-            return false;
+            throw new MinPDOException($ex->getMessage());
         }
     }
 
@@ -37,39 +38,43 @@ class MinPDO {
                 $table = "UPDATE " . $table . " "; // vai montando minha sql
                 $expression = " SET " . $expression . " "; // vai montando minha sql
                 $where = self::minwhere($where);
-                echo $sql = $table . $expression . $where; // monta sql (ate aqui tudo bem)
+                $sql = $table . $expression . $where; // monta sql (ate aqui tudo bem)
                 $sucess = true;
             } else {
-                echo "<br>We must have the same number of columns and values.</br>";
-                return false;
+                throw new MinPDOException("We must have the same number of columns and values.");
             }
-        } else if (is_array($columns) and ! is_array($values))
-            echo "<br>'values' must be an array.</br>";
-        else if (!is_array($columns) and is_array($values))
-            echo "<br>'columns' must be an array.</br>";
+        } else if (is_array($columns) and ! is_array($values)) {
+            throw new MinPDOException("'values' must be an array.");
+        }
+            
+        else if (!is_array($columns) and is_array($values)) {
+            throw new MinPDOException("'columns' must be an array.");
+        }
+            
         else {
             $table = "UPDATE {$table} ";
             $coluna = "SET {$columns}";
             $value = "  = :value0 ";
             $where = self::minwhere($where);
 
-            echo $sql = $table . $coluna . $value . $where;
+            $sql = $table . $coluna . $value . $where;
 
             if ($conn = self::connect()) { // se conectar
                 $stmt = $conn->prepare($sql); //prepara
                 $stmt->bindParam(":value0", $values);
 
-                if ($result = $stmt->execute())
-                    echo "<br>Updated!<br>";
-                if (!$result) {
-                    var_dump($stmt->errorInfo());
-                    exit;
+                if ($result = $stmt->execute()) {
+                    return true;
                 }
+                    
+                if (!$result) {
+                    throw new MinPDOException($stmt->errorInfo());
+                }
+                
                 $conn = null;
                 return true;
             } else {
-                echo "<br>Unable to connect to database!<br>\n<i>Check the connection variables.</i>";
-                return false;
+                throw new MinPDOException("Unable to connect to database!<br>\n<i>Check the connection variables.");
             }
         }
 
@@ -78,85 +83,88 @@ class MinPDO {
                 $stmt = $conn->prepare($sql); //prepara
                 self::bind($stmt, $valuesTotal, $values);
                 
-                if ($result = $stmt->execute())
-                    echo "<br>Updated!<br>";
+                if ($result = $stmt->execute()) {
+                    return true;
+                }
                 if (!$result) {
-                    var_dump($stmt->errorInfo());
-                    exit;
+                    throw new MinPDOException($stmt->errorInfo());
                 }
 
                 $conn = null;
                 return true;
             } else {
-                echo "<br>Unable to connect to database!<br>\n<i>Check the connection variables.</i>";
-                return false;
+                throw new MinPDOException("Unable to connect to database! Check the connection variables.");
             }
         }
     }
 
     public static function consult($table, $columns = "*", $where = NULL, $order = NULL, $limit = NULL, $like = NULL) {
         //conexao feita
-        if ($table)
+        if ($table) {
             $table = "FROM " . $table . " ";
+        }
         else {
-            echo "<br>No table has been indicated.<br>";
-            return false;
+            throw new MinPDOException("No table has been indicated.");
         }
 
-        if ($columns)
+        if ($columns) {
             $columns = "SELECT " . $columns . " ";
-        else
+        }
+        else {
             $columns = "SELECT * ";
+        }
 
         $where = self::minwhere($where);
 
         if ($order) {
             $c = substr($order, -1);
             $order = substr($order, 0, -1);
-            if ($c == "+")
+            if ($c == "+") {
                 $order = "ORDER BY " . $order . " ASC ";
-            else if ($c == "-")
-                $order = "ORDER BY " . $order . " DESC ";
-            else {
-                echo "<br>Tell +/- at the end of variable order!<br>";
-                return false;
             }
-        } else
+            else if ($c == "-") {
+                $order = "ORDER BY " . $order . " DESC ";
+            }
+            else {
+                throw new MinPDOException("Tell +/- at the end of variable order!");
+            }
+        } else {
             $order = NULL;
+        }
 
         if ($limit) {
-            if (is_numeric($limit))
+            if (is_numeric($limit)) {
                 $limit = "LIMIT " . $limit . " ";
-            else {
-                echo "<br>Enter a numeric limit!<br>";
-                return false;
             }
-        } else
+            else {
+                throw new MinPDOException("Enter a numeric limit!");
+            }
+        } else {
             $limit = NULL;
-
+        }
+        
         if ($like) {
             $like = " LIKE '" . $like . "' ";
-        } else
+        } else {
             $like = NULL;
+        }
 
-        echo $sql = $columns . $table . $where . $like . $order . $limit;
+        $sql = $columns . $table . $where . $like . $order . $limit;
 
         if ($conn = self::connect()) {
             if ($result = $conn->query($sql)) {
                 $rows = $result->fetchAll(PDO::FETCH_ASSOC);
-                if (empty($rows))
-                    echo "<br>No results!<br>";
+                if (empty($rows)) {
+                    throw new MinPDOException("No results!");
+                }
                 $conn = null;
-                var_dump($rows);
                 return $rows;
             }
             else {
-                echo "<br>No results!<br>";
-                return false;
+                throw new MinPDOException("No results!");
             }
         } else {
-            echo "<br>Unable to connect to database!<br>\n<i>Check the connection variables.</i>";
-            return false;
+            throw new MinPDOException("Unable to connect to database!<br>\n<i>Check the connection variables.");
         }
     }
 
@@ -174,90 +182,87 @@ class MinPDO {
                 $table = "INSERT INTO " . $table . " ";
                 $column = "(" . implode(", ", $columns) . ")";
                 $value = " VALUES(" . $value . ")";
-                echo $sql = $table . $column . $value;
+                $sql = $table . $column . $value;
                 $sucesso = true;
             } else {
-                echo "<br>We must have the same number of columns and values.</br>";
-                return false;
+                throw new MinPDOException("We must have the same number of columns and values.");
             }
         } else if (is_array($columns) and ! is_array($values)) {
-            echo "<br>'values' must be an array.</br>";
+            throw new MinPDOException("'values' must be an array.");
         } else if (!is_array($columns) and is_array($values)) {
-            echo "<br>'columns' must be an array.</br>";
+            throw new MinPDOException("'columns' must be an array.");
         } else {
             $table = "INSERT INTO {$table} ";
             $column = "({$columns})";
             $value = " VALUES(:value0)";
-            echo $sql = $table . $column . $value;
+            $sql = $table . $column . $value;
 
             if ($conn = self::connect()) { // se conectar
                 $stmt = $conn->prepare($sql); //prepara
                 $stmt->bindParam(":value0", $values);
 
-                if ($result = $stmt->execute())
-                    echo "<br>Inserted!<br>";
+                if ($result = $stmt->execute()) {
+                    return true;
+                }
                 if (!$result) {
-                    var_dump($stmt->errorInfo());
-                    exit;
+                    throw new MinPDOException($stmt->errorInfo());
                 }
                 $conn = null;
                 return true;
             } else {
-                echo "<br>Unable to connect to database!<br>\n<i>Check the connection variables.</i>";
-                return false;
+                throw new MinPDOException("Unable to connect to database!<br>\n<i>Check the connection variables.");
             }
         }
 
         if ($sucesso == true) {
-            echo $sql = $table . $column . $value;
+            $sql = $table . $column . $value;
             if ($conn = self::connect()) {
                 $stmt = $conn->prepare($sql);
                 self::bind($stmt, $valuesTotal, $values);
-                if ($result = $stmt->execute())
-                    echo "<br>Inserted!<br>";
+                if ($result = $stmt->execute()) {
+                    return true;
+                }
                 if (!$result) {
-                    var_dump($stmt->errorInfo());
-                    exit;
+                    throw new MinPDOException($stmt->errorInfo());
                 }
                 $conn = null;
                 return true;
             } else {
-                echo "<br>Unable to connect to database!<br>\n<i>Check the connection variables.</i>";
-                return false;
+                throw new MinPDOException("Unable to connect to database!<br>\n<i>Check the connection variables.");
             }
         }
     }
 
     public static function delete($table, $where = NULL) {
-        if ($table)
+        if ($table) {
             $table = "DELETE FROM " . $table . " ";
+        }
         else {
-            echo "<br>No table has been indicated.<br>";
-            return false;
+            throw new MinPDOException("No table has been indicated.");
         }
 
         $where = self::minwhere($where);
 
-        echo $sql = $table . $where;
+        $sql = $table . $where;
 
         if ($conn = self::connect()) {
             if ($result = $conn->query($sql)) {
                 $stmt = $conn->prepare($sql);
-                if ($result = $stmt->execute())
-                    echo "<br>Deleted!<br>";
-                else
-                    echo "<br>Invalid query!<br>";
+                if ($result = $stmt->execute()) {
+                    return true;
+                }
+                else {
+                    throw new MinPDOException("Invalid query!");
+                }
 
                 $conn = null;
                 return true;
             }
             else {
-                echo "<br>Invalid query!<br>";
-                return false;
+                throw new MinPDOException("Invalid query!");
             }
         } else {
-            echo "<br>Unable to connect to database!<br>\n<i>Check the connection variables.</i>";
-            return false;
+            throw new MinPDOException("Unable to connect to database!<br>\n<i>Check the connection variables.");
         }
     }
 
