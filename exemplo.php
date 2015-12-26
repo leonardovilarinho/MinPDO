@@ -24,18 +24,18 @@
                     <table>
                         <tr>
                             <td>
-                                <a href="ex/inserir.php">1 : inserir()</a>
+                                <a href="ex/inserir.php">1 : insert()</a>
                             </td>
                             <td>
-                                <a href="ex/consultar.php">2 : consultar()</a>
+                                <a href="ex/consultar.php">2 : consult()</a>
                             </td>
                         </tr>
                         <tr>
                             <td>
-                                <a href="ex/atualizar.php">3 : atualizar()</a>
+                                <a href="ex/atualizar.php">3 : update()</a>
                             </td>
                             <td>
-                                <a href="ex/deletar.php">4 : deletar()</a>
+                                <a href="ex/deletar.php">4 : delete()</a>
                             </td>
                         </tr>
                     </table>

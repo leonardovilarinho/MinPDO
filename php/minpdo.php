@@ -1,439 +1,317 @@
 <?php
-function conectar()
-{
-    $sgbd = "mysql";
-    $dbhost = "localhost";
-    $dbname = "minpdo";
-    $dbuser = "root";
-    $dbpass = "";
-    try
-    {
-        $conn = new PDO("{$sgbd}:host={$dbhost};dbname={$dbname};charset=utf8;", $dbuser, $dbpass);
-        $conn ->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        $conn ->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
-        return $conn;
+
+class MinPDO {
+
+    public static $sgbd = "mysql";
+    public static $dbhost = "localhost";
+    public static $dbname = "minpdo";
+    public static $dbuser = "root";
+    public static $dbpass = "";
+
+    public static function connect() {
+        try {
+            $conn = new PDO(self::$sgbd.":host=".self::$dbhost.";dbname=".self::$dbname.";charset=utf8;", self::$dbuser, self::$dbpass);
+            $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            $conn->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
+            return $conn;
+        } catch (PDOException $ex) {
+            echo "<br><b>Error:</b> " . $ex->getMessage();
+            return false;
+        }
     }
-    catch (PDOException $ex)
+
+    public static function update($table, $columns, $values, $where = NULL) {
+        $sucess = false;
+        $sql = null;
+        if (is_array($columns) and is_array($values)) {
+            if ((count($columns)) == (count($values))) {
+                //montar SQL
+                $valuesTotal = count($columns); //conta quantos valores
+                $expression = null;
+                for ($i = 0; $i < $valuesTotal; $i++) {
+                    $expression = $expression . "{$columns[$i]}=:value{$i},";
+                }
+
+                $expression = substr($expression, 0, -1); // remove a última virgula
+
+                $table = "UPDATE " . $table . " "; // vai montando minha sql
+                $expression = " SET " . $expression . " "; // vai montando minha sql
+                $where = self::minwhere($where);
+                echo $sql = $table . $expression . $where; // monta sql (ate aqui tudo bem)
+                $sucess = true;
+            } else {
+                echo "<br>We must have the same number of columns and values.</br>";
+                return false;
+            }
+        } else if (is_array($columns) and ! is_array($values))
+            echo "<br>'values' must be an array.</br>";
+        else if (!is_array($columns) and is_array($values))
+            echo "<br>'columns' must be an array.</br>";
+        else {
+            $table = "UPDATE {$table} ";
+            $coluna = "SET {$columns}";
+            $value = "  = :value0 ";
+            $where = self::minwhere($where);
+
+            echo $sql = $table . $coluna . $value . $where;
+
+            if ($conn = self::connect()) { // se conectar
+                $stmt = $conn->prepare($sql); //prepara
+                $stmt->bindParam(":value0", $values);
+
+                if ($result = $stmt->execute())
+                    echo "<br>Updated!<br>";
+                if (!$result) {
+                    var_dump($stmt->errorInfo());
+                    exit;
+                }
+                $conn = null;
+                return true;
+            } else {
+                echo "<br>Unable to connect to database!<br>\n<i>Check the connection variables.</i>";
+                return false;
+            }
+        }
+
+        if ($sucess == true) {
+            if ($conn = self::connect()) { // se conectar
+                $stmt = $conn->prepare($sql); //prepara
+                self::bind($stmt, $valuesTotal, $values);
+                
+                if ($result = $stmt->execute())
+                    echo "<br>Updated!<br>";
+                if (!$result) {
+                    var_dump($stmt->errorInfo());
+                    exit;
+                }
+
+                $conn = null;
+                return true;
+            } else {
+                echo "<br>Unable to connect to database!<br>\n<i>Check the connection variables.</i>";
+                return false;
+            }
+        }
+    }
+
+    public static function consult($table, $columns = "*", $where = NULL, $order = NULL, $limit = NULL, $like = NULL) {
+        //conexao feita
+        if ($table)
+            $table = "FROM " . $table . " ";
+        else {
+            echo "<br>No table has been indicated.<br>";
+            return false;
+        }
+
+        if ($columns)
+            $columns = "SELECT " . $columns . " ";
+        else
+            $columns = "SELECT * ";
+
+        $where = self::minwhere($where);
+
+        if ($order) {
+            $c = substr($order, -1);
+            $order = substr($order, 0, -1);
+            if ($c == "+")
+                $order = "ORDER BY " . $order . " ASC ";
+            else if ($c == "-")
+                $order = "ORDER BY " . $order . " DESC ";
+            else {
+                echo "<br>Tell +/- at the end of variable order!<br>";
+                return false;
+            }
+        } else
+            $order = NULL;
+
+        if ($limit) {
+            if (is_numeric($limit))
+                $limit = "LIMIT " . $limit . " ";
+            else {
+                echo "<br>Enter a numeric limit!<br>";
+                return false;
+            }
+        } else
+            $limit = NULL;
+
+        if ($like) {
+            $like = " LIKE '" . $like . "' ";
+        } else
+            $like = NULL;
+
+        echo $sql = $columns . $table . $where . $like . $order . $limit;
+
+        if ($conn = self::connect()) {
+            if ($result = $conn->query($sql)) {
+                $rows = $result->fetchAll(PDO::FETCH_ASSOC);
+                if (empty($rows))
+                    echo "<br>No results!<br>";
+                $conn = null;
+                var_dump($rows);
+                return $rows;
+            }
+            else {
+                echo "<br>No results!<br>";
+                return false;
+            }
+        } else {
+            echo "<br>Unable to connect to database!<br>\n<i>Check the connection variables.</i>";
+            return false;
+        }
+    }
+
+    public static function insert($table, $columns, $values) {
+        if (is_array($columns) and is_array($values)) {
+            if ((count($columns)) == (count($values))) {
+                // montar SQL
+                $valuesTotal = count($values);
+                $value = null;
+                for ($i = 0; $i < $valuesTotal; $i++) {
+                    $value = $value . ":value{$i},";
+                }
+                $value = substr($value, 0, -1); // remove a última virgula
+
+                $table = "INSERT INTO " . $table . " ";
+                $column = "(" . implode(", ", $columns) . ")";
+                $value = " VALUES(" . $value . ")";
+                echo $sql = $table . $column . $value;
+                $sucesso = true;
+            } else {
+                echo "<br>We must have the same number of columns and values.</br>";
+                return false;
+            }
+        } else if (is_array($columns) and ! is_array($values)) {
+            echo "<br>'values' must be an array.</br>";
+        } else if (!is_array($columns) and is_array($values)) {
+            echo "<br>'columns' must be an array.</br>";
+        } else {
+            $table = "INSERT INTO {$table} ";
+            $column = "({$columns})";
+            $value = " VALUES(:value0)";
+            echo $sql = $table . $column . $value;
+
+            if ($conn = self::connect()) { // se conectar
+                $stmt = $conn->prepare($sql); //prepara
+                $stmt->bindParam(":value0", $values);
+
+                if ($result = $stmt->execute())
+                    echo "<br>Inserted!<br>";
+                if (!$result) {
+                    var_dump($stmt->errorInfo());
+                    exit;
+                }
+                $conn = null;
+                return true;
+            } else {
+                echo "<br>Unable to connect to database!<br>\n<i>Check the connection variables.</i>";
+                return false;
+            }
+        }
+
+        if ($sucesso == true) {
+            echo $sql = $table . $column . $value;
+            if ($conn = self::connect()) {
+                $stmt = $conn->prepare($sql);
+                self::bind($stmt, $valuesTotal, $values);
+                if ($result = $stmt->execute())
+                    echo "<br>Inserted!<br>";
+                if (!$result) {
+                    var_dump($stmt->errorInfo());
+                    exit;
+                }
+                $conn = null;
+                return true;
+            } else {
+                echo "<br>Unable to connect to database!<br>\n<i>Check the connection variables.</i>";
+                return false;
+            }
+        }
+    }
+
+    public static function delete($table, $where = NULL) {
+        if ($table)
+            $table = "DELETE FROM " . $table . " ";
+        else {
+            echo "<br>No table has been indicated.<br>";
+            return false;
+        }
+
+        $where = self::minwhere($where);
+
+        echo $sql = $table . $where;
+
+        if ($conn = self::connect()) {
+            if ($result = $conn->query($sql)) {
+                $stmt = $conn->prepare($sql);
+                if ($result = $stmt->execute())
+                    echo "<br>Deleted!<br>";
+                else
+                    echo "<br>Invalid query!<br>";
+
+                $conn = null;
+                return true;
+            }
+            else {
+                echo "<br>Invalid query!<br>";
+                return false;
+            }
+        } else {
+            echo "<br>Unable to connect to database!<br>\n<i>Check the connection variables.</i>";
+            return false;
+        }
+    }
+
+    private static function minwhere($where) {
+        if ($where) {
+            $newwhere = "";
+            if (stripos($where, "where") !== false) {
+                if (!strstr($where, "'")) {
+                    $arr1 = preg_split("/([^\w]+\s*)/", $where, -1, PREG_SPLIT_DELIM_CAPTURE);
+                    for ($j = 0; $j < count($arr1); $j++) {
+                        if (stripos($arr1[$j], "=") !== false || stripos($arr1[$j], "!") !== false ||
+                            stripos($arr1[$j], "<") !== false || stripos($arr1[$j], ">") !== false) {
+                            $arr1[$j + 1] = "'" . $arr1[$j + 1] . "'";
+                        }
+                        $newwhere .= " " . $arr1[$j] . " ";
+                    }
+                } else
+                    $newwhere = $where;
+            }
+            else {
+                $newwhere = "WHERE ";
+                if (!strstr($where, "'")) {
+                    $arr1 = preg_split("/([^\w\.\,]+\s*)/", $where, -1, PREG_SPLIT_DELIM_CAPTURE);
+                    for ($j = 0; $j < count($arr1); $j++) {
+                        if (stripos($arr1[$j], "=") !== false || stripos($arr1[$j], "!") !== false ||
+                            stripos($arr1[$j], "<") !== false || stripos($arr1[$j], ">") !== false) {
+                            $arr1[$j + 1] = "'" . $arr1[$j + 1] . "'";
+                        }
+                        $newwhere .= " " . $arr1[$j] . " ";
+                    }
+                } else
+                    $newwhere = "WHERE " . $where;
+            }
+        } else
+            $newwhere = NULL;
+
+        return $newwhere;
+    }
+    
+    private static function bind($stmt, $quantity, $values)
     {
-        echo "<br>Erro de conexão: " . $ex->getMessage();
-        return false;
+        for ($i = 0; $i < $quantity; $i ++) { //substitui o bind criado
+            if (is_string($values[$i]))
+                $stmt->bindParam(":value{$i}", $values[$i], PDO::PARAM_STR);
+            else if (is_numeric($values[$i]))
+                $stmt->bindParam(":value{$i}", $values[$i], PDO::PARAM_INT);
+            else if (is_bool($values[$i]))
+                $stmt->bindParam(":value{$i}", $values[$i]);
+            else if (is_null($values[$i]))
+                $stmt->bindParam(":value{$i}", $values[$i], PDO::PARAM_NULL);
+            else if (is_long($values[$i]))
+                $stmt->bindParam(":value{$i}", $values[$i], PDO::PARAM_LOB);
+        }
     }
 }
 
-function atualizar($tabela, $colunas, $valores, $where)
-{
-    $sucesso = false;
-    $sql = null;
-    if(!function_exists("conectar"))
-    {   //falta include de conexao.php
-        echo "Não há uma conexão ativa com o seu banco de dados!\n<br><i>Inclua a página ../conexao.php<br>";
-        return false;
-    }
-    else
-    {
-        if(is_array($colunas) and is_array($valores))
-        {
-            if((count($colunas)) == (count($valores)))
-            {
-                //montar SQL
-                $totalValores = count($colunas); //conta quantos valores
-                $expressao = null;
-                for($i = 0; $i < $totalValores; $i++)
-                {
-                    $expressao = $expressao."{$colunas[$i]}=:valor{$i},";     
-                }
-                
-                $expressao = substr($expressao, 0, -1); // remove a última virgula
-                
-                $tabela = "UPDATE ".$tabela." "; // vai montando minha sql
-                $expressao = " SET ".$expressao." ";// vai montando minha sql
-                $where = minwhere($where);
-                echo $sql = $tabela.$expressao.$where; // monta sql (ate aqui tudo bem)
-                $sucesso = true;
-            }
-            else
-            {
-                echo "<br>Presicamos ter o mesmo número de colunas e valores</br>";
-                return false;
-            } 
-        }
-        else if(is_array($colunas) and !is_array($valores))
-        {
-            echo "<br>'valores' precisa ser um array.</br>";
-        }
-        else if(!is_array($colunas) and is_array($valores))
-        {
-            echo "<br>'colunas' precisa ser um array.</br>";
-        }
-        else
-        {
-            $tabela = "UPDATE {$tabela} ";
-            $coluna = "SET {$colunas}";
-            $valor = "  = :valor0 ";
-            $where = minwhere($where);
-            echo $sql = $tabela.$coluna.$valor.$where;
-            
-            if($conn = conectar()) // se conectar
-            {
-                $stmt = $conn->prepare($sql); //prepara
-                $stmt->bindParam(":valor0", $valores);
-                
-                if($result = $stmt->execute())
-                    echo "<br>Atualizado!<br>";
-                if(!$result)
-                {
-                    var_dump($stmt->errorInfo());
-                    exit;
-                }
-                $conn = null;
-                return true;
-            }
-            else
-            {
-                echo "<br>Não foi possível conectar-se ao banco de dados!<br>\n<i>Verifique as variáveis do arquivo ../conexao.php</i>";
-                return false;
-            }
-        }
-
-        if($sucesso == true)
-        {
-            if($conn = conectar()) // se conectar
-            {
-                $stmt = $conn->prepare($sql); //prepara
-                for($i = 0; $i < $totalValores; $i ++)
-                { //substitui o bind criado
-                    if(is_string($valores[$i]))
-                        $stmt->bindParam(":valor{$i}", $valores[$i], PDO::PARAM_STR);
-                    else if(is_numeric($valores[$i]))
-                        $stmt->bindParam(":valor{$i}", $valores[$i], PDO::PARAM_INT);
-                    else if(is_bool($valores[$i]))
-                        $stmt->bindParam(":valor{$i}", $valores[$i]);
-                    else if(is_null($valores[$i]))
-                        $stmt->bindParam(":valor{$i}", $valores[$i], PDO::PARAM_NULL);
-                    else if(is_long($valores[$i]))
-                        $stmt->bindParam(":valor{$i}", $valores[$i], PDO::PARAM_LOB);
-                }
-                if($result = $stmt->execute())
-                    echo "<br>Atualizado!<br>";
-                if(!$result)
-                {
-                    var_dump($stmt->errorInfo());
-                    exit;
-                }
-                
-                $conn = null;
-                return true;
-            }
-            else
-            {
-                echo "<br>Não foi possível conectar-se ao banco de dados!<br>\n<i>Verifique as variáveis do arquivo ../conexao.php</i>";
-                return false;
-            }
-        }
-    }
-};
-
-function consultar($tabela, $coluna = "*", $where = NULL, $ordem = NULL, $limite = NULL, $like = NULL)
-{
-    if(!function_exists("conectar"))
-    {   //falta include de conexao.php
-        echo "Não há uma conexão ativa com o seu banco de dados!\n<br><i>Inclua a página ../conexao.php<br>";
-        return false;
-    }
-    else
-    {
-        //conexao feita
-        if($tabela)
-            $tabela = "FROM ".$tabela." ";
-        else
-        {
-            echo "<br>Não foi indicada nenhum tabela.<br>";
-            return false;
-        }
-        
-        if($coluna)
-            $coluna = "SELECT ".$coluna." ";
-        else
-            $coluna = "SELECT * ";
-        
-        $where = minwhere($where);
-        
-        if($ordem)
-        {
-            $c = substr($ordem, -1);
-            $ordem = substr($ordem, 0, -1);
-            if($c == "+")
-                $ordem = "ORDER BY ".$ordem." ASC ";
-            else if($c == "-")
-                $ordem = "ORDER BY ".$ordem." DESC ";
-            else
-            {
-                echo "<br>Informe +/- no final da variável ordem!<br>";
-                return false;
-            }
-        }
-        else
-            $ordem = NULL;
-        
-        if($limite)
-        {
-            if(is_numeric($limite))
-                $limite = "LIMIT ".$limite." ";
-            else
-            {
-                echo "<br>Informe um limite númerico!<br>";
-                return false;
-            }
-        }
-        else
-            $limite = NULL;
-        
-        if($like)
-        {
-            $like = " LIKE '".$like."' ";
-        }  
-        else
-            $like = NULL;
-        
-        $sql = $coluna.$tabela.$where.$like.$ordem.$limite;
-            
-        if($conn = conectar())
-        {
-            if($result = $conn->query($sql))
-            {
-                $rows = $result->fetchAll(PDO::FETCH_ASSOC);
-                if(empty($rows))
-                    echo "<br>Sem resultados!<br>";
-                $conn = null;
-                var_dump($rows);                
-                return $rows;
-            }
-            else
-            {
-                echo "<br>Sem resultados!<br>";
-                return false;
-            }  
-        }
-        else
-        {
-            echo "<br>Não foi possível conectar-se ao banco de dados!<br>\n<i>Verifique as variáveis do arquivo ../conexao.php</i>";
-            return false;
-        }
-    }
-};
-
-
-function inserir($tabela, $colunas, $valores)
-{
-    $sucesso = false;
-    if(!function_exists("conectar"))
-    {   //falta include de conexao.php
-        echo "Não há uma conexão ativa com o seu banco de dados!\n<br><i>Inclua a página ../conexao.php<br>";
-        return false;
-    }
-    else
-    {
-        if(is_array($colunas) and is_array($valores))
-        {
-            if((count($colunas)) == (count($valores)))
-            {
-                // montar SQL
-                $totalValores = count($valores);
-                $valor = null;
-                for($i = 0; $i < $totalValores; $i++)
-                {
-                    $valor = $valor.":valor{$i},";
-                }
-                $valor = substr($valor, 0, -1); // remove a última virgula
-                
-                    $tabela = "INSERT INTO ".$tabela." ";
-                    $coluna = "(".implode(", ", $colunas).")";
-                    $valor = " VALUES(".$valor.")";
-                    echo $sql = $tabela.$coluna.$valor;
-                    $sucesso = true;
-            }
-            else
-            {
-                echo "<br>Presicamos ter o mesmo número de colunas e valores</br>";
-                return false;
-            } 
-        }
-        else if(is_array($colunas) and !is_array($valores))
-        {
-            echo "<br>'valores' precisa ser um array.</br>";
-        }
-        else if(!is_array($colunas) and is_array($valores))
-        {
-            echo "<br>'colunas' precisa ser um array.</br>";
-        }
-        else
-        {
-            $tabela = "INSERT INTO {$tabela} ";
-            $coluna = "({$colunas})";
-            $valor = " VALUES(:valor0)";
-            echo $sql = $tabela.$coluna.$valor;
-            
-            if($conn = conectar()) // se conectar
-            {
-                $stmt = $conn->prepare($sql); //prepara
-                $stmt->bindParam(":valor0", $valores);
-                
-                if($result = $stmt->execute())
-                    echo "<br>Inserido!<br>";
-                if(!$result)
-                {
-                    var_dump($stmt->errorInfo());
-                    exit;
-                }
-                $conn = null;
-                return true;
-            }
-            else
-            {
-                echo "<br>Não foi possível conectar-se ao banco de dados!<br>\n<i>Verifique as variáveis do arquivo ../conexao.php</i>";
-                return false;
-            }
-        }
-
-        if($sucesso == true)
-        {
-            echo $sql = $tabela.$coluna.$valor;
-            if($conn = conectar())
-            {
-                $stmt = $conn->prepare( $sql );
-                for($i = 0; $i < $totalValores; $i ++)
-                {
-                    if(is_string($valores[$i]))
-                        $stmt->bindParam(":valor{$i}", $valores[$i], PDO::PARAM_STR);
-                    else if(is_numeric($valores[$i]))
-                        $stmt->bindParam(":valor{$i}", $valores[$i], PDO::PARAM_INT);
-                    else if(is_bool($valores[$i]))
-                        $stmt->bindParam(":valor{$i}", $valores[$i]);
-                    else if(is_null($valores[$i]))
-                        $stmt->bindParam(":valor{$i}", $valores[$i], PDO::PARAM_NULL);
-                    else if(is_long($valores[$i]))
-                        $stmt->bindParam(":valor{$i}", $valores[$i], PDO::PARAM_LOB);
-                }
-                if($result = $stmt->execute())
-                    echo "<br>Inserido!<br>";
-                if(!$result)
-                {
-                    var_dump($stmt->errorInfo());
-                    exit;
-                }
-                $conn = null;
-                return true;
-            }
-            else
-            {
-                echo "<br>Não foi possível conectar-se ao banco de dados!<br>\n<i>Verifique as variáveis do arquivo ../conexao.php</i>";
-                return false;
-            }
-        }
-        
-    }
-};
-
-
-function deletar($tabela, $where = NULL)
-{
-    if(!function_exists("conectar"))
-    {   //falta include de conexao.php
-        echo "Não há uma conexão ativa com o seu banco de dados!\n<br><i>Inclua a página ../conexao.php<br>";
-        return false;
-    }
-    else
-    {
-        //conexao feita
-        if($tabela)
-            $tabela = "DELETE FROM ".$tabela." ";
-        else
-        {
-            echo "<br>Não foi indicada nenhum tabela.<br>";
-            return false;
-        }
-        
-        $where = minwhere($where);
-
-        echo $sql = $tabela.$where;
-            
-        if($conn = conectar())
-        {
-            if($result = $conn->query($sql))
-            {
-                $stmt = $conn->prepare( $sql );
-                if($result = $stmt->execute())
-                        echo "<br>Deletado!<br>";
-                else
-                    echo "<br>Query inválida!<br>";
-                
-                $conn = null;
-                return true;
-            }
-            else
-            {
-                echo "<br>Query inválida!<br>";
-                return false;
-            }  
-        }
-        else
-        {
-            echo "<br>Não foi possível conectar-se ao banco de dados!<br>\n<i>Verifique as variáveis do arquivo ../conexao.php</i>";
-            return false;
-        }
-    }
-};
-
-function minwhere($where)
-{
-    if($where)
-    {
-        $newwhere = "";
-        if(stripos($where, "where") !== false)
-        {
-            if(!strstr($where, "'"))
-            {
-                $arr1 = preg_split("/([^\w]+\s*)/", $where, -1, PREG_SPLIT_DELIM_CAPTURE);
-                for($j = 0; $j < count($arr1); $j++)
-                {
-                    if(stripos($arr1[$j], "=") !== false || stripos($arr1[$j], "!") !== false ||
-                       stripos($arr1[$j], "<") !== false || stripos($arr1[$j], ">") !== false)
-                    {
-                        $arr1[$j+1] = "'".$arr1[$j+1]."'";
-                    }
-                    $newwhere .= " ".$arr1[$j]." ";
-                }
-            }
-            else
-                $newwhere = $where;
-        }
-        else
-        {
-            $newwhere = "WHERE ";
-            if(!strstr($where, "'"))
-            {
-                $arr1 = preg_split("/([^\w]+\s*)/", $where, -1, PREG_SPLIT_DELIM_CAPTURE);
-                for($j = 0; $j < count($arr1); $j++)
-                {
-                    if(stripos($arr1[$j], "=") !== false || stripos($arr1[$j], "!") !== false ||
-                       stripos($arr1[$j], "<") !== false || stripos($arr1[$j], ">") !== false)
-                    {
-                        $arr1[$j+1] = "'".$arr1[$j+1]."'";
-                    }
-                    $newwhere .= " ".$arr1[$j]." ";
-                }
-            }
-            else
-                $newwhere = "WHERE ".$where;
-
-        }
-       
-    }   
-    else
-        $newwhere = NULL;  
-
-return $newwhere;
-};
-
 ?>
-
